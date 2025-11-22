@@ -1,0 +1,33 @@
+# Large data files (add to git LFS if needed)
+*.egenes.txt
+Heart_Left_Ventricle.v8.egenes.txt
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Results (regenerated)
+mr_results.txt
+
+# Temporary files
+*.tmp
+*.log
+
