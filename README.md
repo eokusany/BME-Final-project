@@ -85,4 +85,3 @@ The analysis produces:
 - Emmanuel Okusanya (eokusany@ualberta.ca)
 
 University of Alberta, Canada
-
