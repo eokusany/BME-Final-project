@@ -50,12 +50,12 @@ outcome = outcome_raw.rename(columns={
     "n": "n_outcome"
 })
 
-# Keep only relevant columns and drop missing
+# Keep only relevant columns and drop missing (but allow missing n)
 exposure = exposure[["snp", "ea_exposure", "oa_exposure",
-                     "beta_exposure", "se_exposure", "pval_exposure", "n_exposure"]].dropna()
+                     "beta_exposure", "se_exposure", "pval_exposure", "n_exposure"]].dropna(subset=["snp", "ea_exposure", "oa_exposure", "beta_exposure", "se_exposure", "pval_exposure"])
 
 outcome = outcome[["snp", "ea_outcome", "oa_outcome",
-                   "beta_outcome", "se_outcome", "pval_outcome", "n_outcome"]].dropna()
+                   "beta_outcome", "se_outcome", "pval_outcome", "n_outcome"]].dropna(subset=["snp", "ea_outcome", "oa_outcome", "beta_outcome", "se_outcome", "pval_outcome"])
 
 print_and_write(f"Exposure SNPs: {exposure.shape[0]}")
 print_and_write(f"Outcome SNPs:  {outcome.shape[0]}")
