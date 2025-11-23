@@ -2,6 +2,11 @@
 *.egenes.txt
 Heart_Left_Ventricle.v8.egenes.txt
 
+# Processed data files
+synthetic_exposure_eqtl.txt
+synthetic_outcome_lvef.txt
+*.vcf.gz
+
 # Python cache
 __pycache__/
 *.py[cod]
