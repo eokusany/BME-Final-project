@@ -7,7 +7,24 @@ Converts GTEx format to MR-required format
 import pandas as pd
 import numpy as np
 
-def process_gtex_egenes(input_file, output_file, pval_threshold=5e-8, min_maf=0.01):
+# Curated gene lists for focused analysis (30-40 SNPs)
+POSITIVE_CONTROLS = ['SLC28A1', 'SLC28A3', 'RARG', 'CBR3', 'NOS3']
+
+GENE_LIST = [
+    'PRDM2', 'WDR4', 'ZNF521', 'SP4', 'RIN3', 'ABCC1', 'ABCC9', 'ABCC5', 
+    'HNMT', 'SLC22A17', 'ERCC2', 'MYH7', 'CYP2J2', 'COL1A2', 'SPG7', 
+    'GPX3', 'ABCB4', 'GSTP1', 'PLCE1', 'GSTM1', 'CELF4', 'CYBA', 'HAS3', 
+    'MLH1', 'POR', 'RAC2', 'CAT', 'ABCC2', 'ATP2B1', 'CBR1', 'ERBB2'
+]
+
+NEGATIVE_CONTROLS = ['KRT1', 'KRT10', 'INS', 'AMY1']
+
+HOUSEKEEPING_GENES = ['GAPDH', 'ACTB', 'RPLP0']
+
+# Combine all genes into a single set for filtering
+CURATED_GENES = set(POSITIVE_CONTROLS + GENE_LIST + NEGATIVE_CONTROLS + HOUSEKEEPING_GENES)
+
+def process_gtex_egenes(input_file, output_file, pval_threshold=5e-8, min_maf=0.01, filter_genes=None, top_snp_per_gene=True):
     """
     Process GTEx egenes file to MR format
     
@@ -21,6 +38,10 @@ def process_gtex_egenes(input_file, output_file, pval_threshold=5e-8, min_maf=0.
         P-value threshold for filtering (default: 5e-8 for genome-wide significance)
     min_maf : float
         Minimum minor allele frequency (default: 0.01)
+    filter_genes : set or None
+        Set of gene names to filter by. If None, uses CURATED_GENES. If empty set, no filtering.
+    top_snp_per_gene : bool
+        If True, select only the top (lowest p-value) SNP per gene. Default: True
     """
     print("=" * 70)
     print("Processing GTEx Heart Left Ventricle eQTL Data")
@@ -56,11 +77,33 @@ def process_gtex_egenes(input_file, output_file, pval_threshold=5e-8, min_maf=0.
         df = df[df['maf'] >= min_maf].copy()
         print(f"  - After MAF filter (MAF >= {min_maf}): {df.shape[0]} rows")
     
+    # Filter by curated gene list if specified
+    if filter_genes is None:
+        filter_genes = CURATED_GENES
+    
+    if filter_genes and 'gene_name' in df.columns:
+        initial_gene_count = df.shape[0]
+        df = df[df['gene_name'].isin(filter_genes)].copy()
+        print(f"  - After gene filter ({len(filter_genes)} genes): {df.shape[0]} rows")
+        if initial_gene_count > df.shape[0]:
+            print(f"  - Removed {initial_gene_count - df.shape[0]} rows not matching curated genes")
+        
+        # Report which genes were found
+        found_genes = df['gene_name'].unique()
+        missing_genes = filter_genes - set(found_genes)
+        print(f"  - Found SNPs for {len(found_genes)} genes: {sorted(found_genes)}")
+        if missing_genes:
+            print(f"  - Warning: No SNPs found for {len(missing_genes)} genes: {sorted(missing_genes)}")
+    
     # Create output dataframe with required columns
     output_df = pd.DataFrame()
     
     # Map columns
     output_df['rsid'] = df['rs_id_dbSNP151_GRCh38p7'].astype(str)
+    
+    # Add gene_name if available (useful for tracking)
+    if 'gene_name' in df.columns:
+        output_df['gene_name'] = df['gene_name'].astype(str)
     
     # Determine effect allele and other allele
     # In GTEx, 'alt' is typically the effect allele, 'ref' is the other allele
@@ -108,17 +151,36 @@ def process_gtex_egenes(input_file, output_file, pval_threshold=5e-8, min_maf=0.
     if initial_dup > output_df.shape[0]:
         print(f"  - Removed {initial_dup - output_df.shape[0]} duplicate SNPs")
     
+    # If gene_name is available and top_snp_per_gene is True, select top SNP per gene
+    if top_snp_per_gene and 'gene_name' in output_df.columns:
+        initial_count = output_df.shape[0]
+        # Sort by p-value, then take first (lowest p-value) per gene
+        output_df = output_df.sort_values('pval').groupby('gene_name').first().reset_index()
+        if initial_count > output_df.shape[0]:
+            print(f"  - Selected top SNP per gene: {output_df.shape[0]} SNPs from {output_df['gene_name'].nunique()} genes")
+    
     # Sort by p-value
     output_df = output_df.sort_values('pval')
     
-    # Select and reorder columns
-    output_df = output_df[['rsid', 'effect_allele', 'other_allele', 'beta', 'se', 'pval', 'n']]
+    # Select and reorder columns (include gene_name if available)
+    base_cols = ['rsid', 'effect_allele', 'other_allele', 'beta', 'se', 'pval', 'n']
+    if 'gene_name' in output_df.columns:
+        base_cols.insert(1, 'gene_name')  # Insert after rsid
+    output_df = output_df[base_cols]
     
     # Save to file
     output_df.to_csv(output_file, sep='\t', index=False)
     
     print(f"\n✓ Processed data saved to: {output_file}")
     print(f"  Final SNPs: {output_df.shape[0]}")
+    
+    # Report gene breakdown if gene_name is available
+    if 'gene_name' in output_df.columns:
+        gene_counts = output_df['gene_name'].value_counts()
+        print(f"\nSNPs per gene:")
+        for gene, count in gene_counts.items():
+            print(f"  - {gene}: {count} SNPs")
+    
     print(f"\nSummary statistics:")
     print(f"  - P-value range: {output_df['pval'].min():.2e} to {output_df['pval'].max():.2e}")
     print(f"  - Beta range: {output_df['beta'].min():.4f} to {output_df['beta'].max():.4f}")
@@ -136,12 +198,20 @@ if __name__ == "__main__":
     
     print("\nNote: This will replace the synthetic exposure data file.")
     print("Make sure you have a backup if needed.\n")
+    print(f"Filtering by curated gene list ({len(CURATED_GENES)} genes):")
+    print(f"  - Positive controls: {len(POSITIVE_CONTROLS)} genes")
+    print(f"  - Main gene list: {len(GENE_LIST)} genes")
+    print(f"  - Negative controls: {len(NEGATIVE_CONTROLS)} genes")
+    print(f"  - Housekeeping genes: {len(HOUSEKEEPING_GENES)} genes")
+    print()
     
     success = process_gtex_egenes(
         input_file=input_file,
         output_file=output_file,
-        pval_threshold=5e-8,  # Genome-wide significance
-        min_maf=0.01  # Minimum MAF of 1%
+        pval_threshold=5e-4,  # More lenient threshold to get 30-40 SNPs
+        min_maf=0.01,  # Minimum MAF of 1%
+        filter_genes=CURATED_GENES,  # Filter by curated genes
+        top_snp_per_gene=True  # Select top SNP per gene for better coverage
     )
     
     if success:

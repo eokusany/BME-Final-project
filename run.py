@@ -2,7 +2,6 @@ import pandas as pd
 import numpy as np
 from scipy import stats
 import statsmodels.api as sm
-from datetime import datetime
 
 # Open output file for writing results
 output_file = "mr_results.txt"
@@ -16,8 +15,6 @@ def print_and_write(*args, **kwargs):
 
 print_and_write("=" * 70)
 print_and_write("Mendelian Randomization Analysis Results")
-print_and_write("=" * 70)
-print_and_write(f"Analysis Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 print_and_write("=" * 70)
 print_and_write()
 
@@ -40,6 +37,11 @@ exposure = exposure_raw.rename(columns={
     "n": "n_exposure"
 })
 
+# Preserve gene_name if present
+has_gene_name = "gene_name" in exposure_raw.columns
+if has_gene_name:
+    exposure["gene_name"] = exposure_raw["gene_name"]
+
 outcome = outcome_raw.rename(columns={
     "rsid": "snp",
     "effect_allele": "ea_outcome",
@@ -50,15 +52,25 @@ outcome = outcome_raw.rename(columns={
     "n": "n_outcome"
 })
 
-# Keep only relevant columns and drop missing (but allow missing n)
-exposure = exposure[["snp", "ea_exposure", "oa_exposure",
-                     "beta_exposure", "se_exposure", "pval_exposure", "n_exposure"]].dropna(subset=["snp", "ea_exposure", "oa_exposure", "beta_exposure", "se_exposure", "pval_exposure"])
+# Keep only relevant columns and drop missing (but allow missing n and gene_name)
+exposure_cols = ["snp", "ea_exposure", "oa_exposure",
+                 "beta_exposure", "se_exposure", "pval_exposure", "n_exposure"]
+if has_gene_name:
+    exposure_cols.append("gene_name")
+exposure = exposure[exposure_cols].dropna(subset=["snp", "ea_exposure", "oa_exposure", "beta_exposure", "se_exposure", "pval_exposure"])
 
 outcome = outcome[["snp", "ea_outcome", "oa_outcome",
                    "beta_outcome", "se_outcome", "pval_outcome", "n_outcome"]].dropna(subset=["snp", "ea_outcome", "oa_outcome", "beta_outcome", "se_outcome", "pval_outcome"])
 
 print_and_write(f"Exposure SNPs: {exposure.shape[0]}")
 print_and_write(f"Outcome SNPs:  {outcome.shape[0]}")
+
+# Report gene information if available
+if has_gene_name:
+    unique_genes = exposure["gene_name"].nunique()
+    print_and_write(f"Unique genes in exposure: {unique_genes}")
+    gene_counts = exposure["gene_name"].value_counts()
+    print_and_write(f"Genes represented: {', '.join(sorted(gene_counts.index))}")
 
 
 # ========= 2. MERGE + HARMONISE ALLELES =========
@@ -148,7 +160,7 @@ z_ivw = beta_ivw / se_ivw
 p_ivw = 2 * (1 - stats.norm.cdf(np.abs(z_ivw)))
 
 print_and_write()
-print_and_write("=== IVW MR result (synthetic expression -> synthetic outcome) ===")
+print_and_write("=== IVW MR result (expression -> outcome) ===")
 print_and_write(f"beta_IVW = {beta_ivw:.4f}")
 print_and_write(f"SE_IVW   = {se_ivw:.4f}")
 print_and_write(f"z        = {z_ivw:.3f}")
@@ -174,14 +186,18 @@ z_intercept = intercept / se_intercept
 p_intercept = 2 * (1 - stats.norm.cdf(np.abs(z_intercept)))
 
 print_and_write()
-print_and_write("=== MR-Egger result (synthetic data) ===")
+print_and_write("=== MR-Egger result ===")
 print_and_write(f"slope (causal)      = {slope:.4f} (SE = {se_slope:.4f}, p = {p_slope:.3e})")
 print_and_write(f"intercept (pleio)   = {intercept:.4f} (SE = {se_intercept:.4f}, p = {p_intercept:.3e})")
 print_and_write(f"Number of SNPs used = {merged_h.shape[0]}")
-print_and_write()
-print_and_write("=" * 70)
-print_and_write("Analysis complete. Results saved to:", output_file)
-print_and_write("=" * 70)
+
+# Report final gene breakdown if available
+if has_gene_name and "gene_name" in merged_h.columns:
+    final_genes = merged_h["gene_name"].value_counts()
+    print_and_write()
+    print_and_write("=== Final SNPs by Gene ===")
+    for gene, count in sorted(final_genes.items()):
+        print_and_write(f"  {gene}: {count} SNPs")
 
 # Close the output file
 f.close()
