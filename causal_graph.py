@@ -12,9 +12,6 @@ Development notes:
 - Initially tried using SNP-level data directly but PC algorithm found 0 edges
 - Switched to bootstrap sampling approach after reading PC algorithm documentation
 - MR-based graph provides complementary view using actual MR estimates
-
-Author: Emmanuel Okusanya
-Date: 2024
 """
 
 import pandas as pd
@@ -41,8 +38,6 @@ print("=" * 70)
 print("Improved Causal Graph Discovery")
 print("=" * 70)
 print()
-
-# ========= 1. LOAD DATA =========
 
 print("Loading MR data...")
 exposure = pd.read_csv("exposure.txt", sep="\t")
@@ -200,15 +195,11 @@ for gene in genes:
 gene_df = pd.DataFrame(gene_summary)
 print(f"  - Gene-level summary calculated for {len(gene_df)} genes")
 
-# ========= 4. PREPARE DATA FOR PC ALGORITHM =========
-
-print("\nPreparing data for PC algorithm...")
-
 
 n_bootstrap = 1000  # Number of bootstrap samples
 # Chose 1000 as a balance - enough for stable results but not too slow
 # Initially tried 100 but PC algorithm found very few edges
-# Increased to 1000 after reading that PC algorithm needs sufficient sample size
+
 print(f"  - Creating {n_bootstrap} bootstrap samples for PC algorithm...")
 
 np.random.seed(42)  # For reproducibility - learned this is important!
@@ -241,7 +232,7 @@ data_scaled = scaler.fit_transform(data_df.values)
 
 var_names = list(genes) + ['LVEF']
 
-# ========= 5. RUN PC ALGORITHM =========
+# RUN PC ALGORITHM
 # PC algorithm: Constraint-based causal discovery
 # Tests conditional independence to infer causal structure
 # Alpha = significance threshold for independence tests
@@ -251,7 +242,7 @@ G_pc = None
 if CAUSAL_LEARN_AVAILABLE:
     print("\nRunning PC algorithm...")
     
-    alpha = 0.05  # Standard significance level - could adjust but 0.05 is conventional
+    alpha = 0.05  # Standard significance level
     
     try:
         cg = pc(data_scaled, alpha=alpha, indep_test='fisherz', stable=True)
@@ -276,17 +267,13 @@ if CAUSAL_LEARN_AVAILABLE:
         print(f"  - Error running PC algorithm: {e}")
         print("  - Will create MR-based graph...")
 
-# ========= 6. CREATE MR-BASED CAUSAL GRAPH =========
-
-print("\nCreating MR-based causal graph...")
-
+# CREATE MR-BASED CAUSAL GRAPH 
 G_mr = nx.DiGraph()
 G_mr.add_nodes_from(var_names)
 
 # Add edges based on MR results
 # Gene -> LVEF edges based on MR significance
 pval_threshold = 0.05
-
 for _, row in gene_df.iterrows():
     gene = row['gene']
     pval = row['pval_mr']
@@ -323,9 +310,7 @@ if len(gene_corr_data) > 1:
         for gene2 in genes[i+1:]:
             snps1 = merged_h[merged_h['gene_name'] == gene1]
             snps2 = merged_h[merged_h['gene_name'] == gene2]
-            
-            # Find common SNPs or use all SNPs
-            # For simplicity, use correlation of average effects
+        
             if len(snps1) > 0 and len(snps2) > 0:
                 # Sample-based correlation
                 n_samples = min(100, len(snps1), len(snps2))
@@ -336,11 +321,8 @@ if len(gene_corr_data) > 1:
                 if not np.isnan(corr) and abs(corr) > 0.1:  # Threshold
                     G_mr.add_edge(gene1, gene2, weight=abs(corr), correlation=corr)
 
-# ========= 7. VISUALIZE GRAPHS =========
+#  GRAPHS
 
-print("\nVisualizing causal graphs...")
-
-# Create radial layout
 def create_radial_layout(genes, center_node='LVEF'):
     pos = {}
     pos[center_node] = (0, 0)
@@ -401,8 +383,8 @@ plt.title("MR-Based Causal Graph\n(Gene Expression → LVEF, weighted by MR effe
           fontsize=18, fontweight='bold', pad=20)
 plt.axis('off')
 plt.tight_layout()
-plt.savefig('causal_graph_mr_improved.png', dpi=300, bbox_inches='tight', facecolor='white')
-print("  - Saved MR graph to: causal_graph_mr_improved.png")
+plt.savefig('mr.png', dpi=300, bbox_inches='tight', facecolor='white')
+print("  - Saved MR graph to: mr.png")
 
 # Visualize PC algorithm graph if available
 if G_pc is not None and G_pc.number_of_edges() > 0:
@@ -440,8 +422,8 @@ if G_pc is not None and G_pc.number_of_edges() > 0:
               fontsize=18, fontweight='bold', pad=20)
     plt.axis('off')
     plt.tight_layout()
-    plt.savefig('causal_graph_pc_improved.png', dpi=300, bbox_inches='tight', facecolor='white')
-    print("  - Saved PC graph to: causal_graph_pc_improved.png")
+    plt.savefig('pc.png', dpi=300, bbox_inches='tight', facecolor='white')
+    print("  - Saved PC graph to: pc.png")
 
 # ========= 8. SAVE GRAPH DATA =========
 
@@ -460,8 +442,8 @@ for u, v, data in G_mr.edges(data=True):
         'n_snps': data.get('n_snps', np.nan)
     })
 
-pd.DataFrame(mr_edges_list).to_csv('causal_graph_mr_edges_improved.csv', index=False)
-print("  - Saved MR edges to: causal_graph_mr_edges_improved.csv")
+pd.DataFrame(mr_edges_list).to_csv('mr_edges.csv', index=False)
+print("  - Saved MR edges to: mr_edges.csv")
 
 # Save gene summary statistics
 gene_df.to_csv('gene_mr_summary.csv', index=False)
@@ -472,8 +454,8 @@ if G_pc is not None:
     pc_edges_list = []
     for u, v in G_pc.edges():
         pc_edges_list.append({'source': u, 'target': v})
-    pd.DataFrame(pc_edges_list).to_csv('causal_graph_pc_edges_improved.csv', index=False)
-    print("  - Saved PC edges to: causal_graph_pc_edges_improved.csv")
+    pd.DataFrame(pc_edges_list).to_csv('pc_edges.csv', index=False)
+    print("  - Saved PC edges to: pc_edges.csv")
 
 
 print("\n" + "=" * 70)

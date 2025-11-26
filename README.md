@@ -54,10 +54,10 @@ python3 causal_graph.py
 ```
 
 This generates:
-- `causal_graph_mr_improved.png` - MR-based causal graph (gene → LVEF edges based on MR significance)
-- `causal_graph_pc_improved.png` - PC algorithm causal graph (constraint-based causal discovery)
-- `causal_graph_mr_edges_improved.csv` - MR graph edge data with statistics
-- `causal_graph_pc_edges_improved.csv` - PC algorithm edge data
+- `mr.png` - MR-based causal graph (gene → LVEF edges based on MR significance)
+- `pc.png` - PC algorithm causal graph (constraint-based causal discovery)
+- `mr_edges.csv` - MR graph edge data with statistics
+- `pc_edges.csv` - PC algorithm edge data
 - `gene_mr_summary.csv` - Gene-level MR summary statistics
 
 ## Requirements
