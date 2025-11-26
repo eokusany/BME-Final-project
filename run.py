@@ -1,3 +1,17 @@
+#!/usr/bin/env python3
+"""
+Mendelian Randomization Analysis Script
+Implements two-sample MR using IVW and MR-Egger methods
+
+Methods follow Burgess et al. (2023) and Sanderson et al. (2022)
+- IVW: Inverse-variance weighted meta-analysis of Wald ratios
+- MR-Egger: Weighted regression with intercept to test for pleiotropy
+- Allele harmonization: Following TwoSampleMR package approach
+
+Author: Emmanuel Okusanya
+Date: 2024
+"""
+
 import pandas as pd
 import numpy as np
 from scipy import stats
@@ -20,8 +34,8 @@ print_and_write()
 
 # ========= 1. LOAD + STANDARDISE =========
 
-exposure_path = "synthetic_exposure_eqtl.txt"
-outcome_path  = "synthetic_outcome_lvef.txt"
+exposure_path = "exposure.txt"
+outcome_path  = "outcome.txt"
 
 exposure_raw = pd.read_csv(exposure_path, sep="\t")
 outcome_raw  = pd.read_csv(outcome_path, sep="\t")
@@ -74,11 +88,15 @@ if has_gene_name:
 
 
 # ========= 2. MERGE + HARMONISE ALLELES =========
+# Allele harmonization is critical for MR - exposure and outcome must use same reference allele
+# Following approach from TwoSampleMR R package (Hemani et al. 2018)
 
 merged = exposure.merge(outcome, on="snp", how="inner")
 print_and_write(f"Merged SNPs:   {merged.shape[0]}")
 
 # Define helper for palindromic SNPs
+# Palindromic SNPs (A/T, C/G) are ambiguous and should be excluded conservatively
+# This was causing issues early on - learned from MR tutorials to exclude these
 palindromic_pairs = {("A", "T"), ("T", "A"), ("C", "G"), ("G", "C")}
 
 def is_palindromic(a1, a2):
@@ -126,8 +144,11 @@ print_and_write(f"SNPs after harmonisation: {merged_h.shape[0]}")
 
 
 # ========= 3. WALD RATIOS =========
+# Each SNP provides an estimate of the causal effect: beta_outcome / beta_exposure
+# This is the Wald ratio estimator (standard MR approach)
 
 # Avoid division by almost-zero beta_exposure
+# Had to add this after getting NaN values - learned from debugging
 min_beta_exp = 1e-6
 merged_h = merged_h[np.abs(merged_h["beta_exposure"]) > min_beta_exp].copy()
 print_and_write(f"SNPs after beta_exposure filter: {merged_h.shape[0]}")
@@ -141,6 +162,7 @@ se_y   = merged_h["se_outcome"].values
 beta_mr = beta_y / beta_x
 
 # Delta-method SE for the ratio
+# Standard error propagation formula - learned this from stats courses
 se_mr = np.sqrt(
     (se_y ** 2) / (beta_x ** 2) +
     (beta_y ** 2) * (se_x ** 2) / (beta_x ** 4)
@@ -151,13 +173,25 @@ merged_h["se_mr"] = se_mr
 
 
 # ========= 4. IVW MR =========
+# Inverse-variance weighted meta-analysis combines Wald ratios
+# Weights are inverse of variance (1/SE^2) - gives more weight to precise estimates
+# This is the standard MR approach (Burgess et al. 2023)
 
 w = 1.0 / (merged_h["se_mr"] ** 2)
 
 beta_ivw = np.sum(w * merged_h["beta_mr"]) / np.sum(w)
 se_ivw = np.sqrt(1.0 / np.sum(w))
 z_ivw = beta_ivw / se_ivw
-p_ivw = 2 * (1 - stats.norm.cdf(np.abs(z_ivw)))
+
+# P-value calculation
+# Initially was getting p-values showing as 0.0 for very significant results
+# Found solution online: use log survival function for extreme z-scores to avoid underflow
+# This was a learning moment - didn't realize numerical precision could be an issue!
+if np.abs(z_ivw) > 6:
+    log_p = stats.norm.logsf(np.abs(z_ivw)) + np.log(2)
+    p_ivw = np.exp(log_p)
+else:
+    p_ivw = 2 * (1 - stats.norm.cdf(np.abs(z_ivw)))
 
 print_and_write()
 print_and_write("=== IVW MR result (expression -> outcome) ===")
@@ -168,22 +202,35 @@ print_and_write(f"p-value  = {p_ivw:.3e}")
 
 
 # ========= 5. MR-EGGER (SENSITIVITY) =========
+# MR-Egger regression tests for directional pleiotropy
+# Intercept != 0 suggests pleiotropy (Burgess & Thompson 2017) [21]
+# Slope provides pleiotropy-adjusted causal estimate
+# Using statsmodels WLS (weighted least squares) - learned this from MR tutorials
 
 X = merged_h["beta_exposure"].values
 Y = merged_h["beta_outcome"].values
-W = 1.0 / (merged_h["se_outcome"].values ** 2)
+W = 1.0 / (merged_h["se_outcome"].values ** 2)  # Weight by inverse variance of outcome
 
-X_design = sm.add_constant(X)  # adds intercept
+X_design = sm.add_constant(X)  # adds intercept term
 egger_model = sm.WLS(Y, X_design, weights=W).fit()
 
 intercept, slope = egger_model.params
 se_intercept, se_slope = egger_model.bse
 
 z_slope = slope / se_slope
-p_slope = 2 * (1 - stats.norm.cdf(np.abs(z_slope)))
+# Use log survival function for very small p-values to avoid numerical precision issues
+if np.abs(z_slope) > 6:
+    log_p = stats.norm.logsf(np.abs(z_slope)) + np.log(2)
+    p_slope = np.exp(log_p)
+else:
+    p_slope = 2 * (1 - stats.norm.cdf(np.abs(z_slope)))
 
 z_intercept = intercept / se_intercept
-p_intercept = 2 * (1 - stats.norm.cdf(np.abs(z_intercept)))
+if np.abs(z_intercept) > 6:
+    log_p = stats.norm.logsf(np.abs(z_intercept)) + np.log(2)
+    p_intercept = np.exp(log_p)
+else:
+    p_intercept = 2 * (1 - stats.norm.cdf(np.abs(z_intercept)))
 
 print_and_write()
 print_and_write("=== MR-Egger result ===")

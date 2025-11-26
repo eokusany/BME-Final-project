@@ -12,10 +12,9 @@ This project implements a two-sample Mendelian Randomization (MR) framework to e
 ## Project Structure
 
 - `run.py` - Main MR analysis script (IVW and MR-Egger)
-- `process_gtex_data.py` - Processes GTEx eQTL data for MR
-- `get_real_data.py` - Helper script to format downloaded GWAS/eQTL data
-- `download_data.py` - Guide for downloading data from public databases
-- `causal_learn_example.py` - Causal discovery using causal-learn library
+- `causal_graph.py` - Causal graph discovery using PC algorithm and MR results
+- `exposure.txt` - Processed exposure data (eQTL summary statistics)
+- `outcome.txt` - Processed outcome data (GWAS summary statistics)
 
 ## Data Sources
 
@@ -30,19 +29,13 @@ This project implements a two-sample Mendelian Randomization (MR) framework to e
 
 ## Usage
 
-### 1. Prepare Data
+### Prerequisites
 
-Process GTEx exposure data:
-```bash
-python3 process_gtex_data.py
-```
+Ensure you have the required data files:
+- `exposure.txt` - Exposure data (eQTL summary statistics)
+- `outcome.txt` - Outcome data (GWAS summary statistics)
 
-Format outcome GWAS data:
-```bash
-python3 get_real_data.py
-```
-
-### 2. Run MR Analysis
+### 1. Run MR Analysis
 
 ```bash
 python3 run.py
@@ -52,6 +45,20 @@ Results are saved to `mr_results.txt` and include:
 - IVW MR estimates
 - MR-Egger regression (pleiotropy testing)
 - SNP harmonization statistics
+- Gene-level SNP counts
+
+### 2. Generate Causal Graphs
+
+```bash
+python3 causal_graph.py
+```
+
+This generates:
+- `causal_graph_mr_improved.png` - MR-based causal graph (gene → LVEF edges based on MR significance)
+- `causal_graph_pc_improved.png` - PC algorithm causal graph (constraint-based causal discovery)
+- `causal_graph_mr_edges_improved.csv` - MR graph edge data with statistics
+- `causal_graph_pc_edges_improved.csv` - PC algorithm edge data
+- `gene_mr_summary.csv` - Gene-level MR summary statistics
 
 ## Requirements
 
@@ -61,23 +68,39 @@ pip install pandas numpy scipy statsmodels causal-learn
 
 ## Methods
 
-- **Inverse-Variance Weighted (IVW)**: Main causal estimate
-- **MR-Egger**: Sensitivity analysis for pleiotropy
+### Mendelian Randomization
+- **Inverse-Variance Weighted (IVW)**: Main causal estimate using meta-analysis of Wald ratios
+- **MR-Egger**: Sensitivity analysis for pleiotropy detection
 - **Allele Harmonization**: Automatic alignment of exposure/outcome alleles
-- **Palindromic SNP Filtering**: Conservative removal of ambiguous SNPs
+- **Palindromic SNP Filtering**: Conservative removal of ambiguous SNPs (A/T, C/G)
+
+### Causal Graph Discovery
+- **PC Algorithm**: Constraint-based causal discovery using causal-learn library
+- **MR-based Graph**: Directed graph using MR significance and effect sizes
+- **Bootstrap Sampling**: Creates multiple observations for PC algorithm from SNP-level data
 
 ## Output
 
-The analysis produces:
+### MR Analysis (`run.py`)
 - Causal effect estimates (beta, SE, p-value)
 - Pleiotropy assessment (MR-Egger intercept)
 - Harmonization statistics
 - Number of SNPs used in analysis
+- Gene-level SNP breakdown
+
+### Causal Graphs (`causal_graph.py`)
+- MR-based causal graph visualization
+- PC algorithm causal structure visualization
+- Edge data files with MR statistics
+- Gene-level MR summary statistics
 
 ## References
 
-- Burgess S, Scott RA, Timpson NJ, et al. Using published data in Mendelian randomization: a blueprint for efficient identification of causal risk factors. Eur J Epidemiol. 2015; 30(7): 543–552.
-- Sanderson, E., Glymour, M.M., Holmes, M.V. et al. Mendelian randomization. Nat Rev Methods Primers 2, 6 (2022).
+- Sanderson E, Glymour MM, Holmes MV, et al. Mendelian Randomization. Nat Rev Methods Primers 2, 6 (2022). [10]
+- Burgess S, Davey Smith G, Davies NM, et al. Guidelines for performing Mendelian randomization investigations. Wellcome Open Res. 2023; 4: 186. [16]
+- Burgess S, Scott RA, Timpson NJ, Davey Smith G, Thompson SG. Using published data in Mendelian randomization: a blueprint for efficient identification of causal risk. Eur J Epidemiol. 2015;30(7):543-552. [17]
+- rondolab. MR-PRESSO (2023). https://github.com/rondolab/MR-PRESSO. [20]
+- Burgess S, Thompson SG. Interpreting findings from Mendelian randomization using the MR-Egger method. Eur J Epidemiol. 2017;32(5):377-389. [21]
 
 ## Authors
 
