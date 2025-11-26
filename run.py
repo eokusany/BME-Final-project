@@ -1,16 +1,4 @@
 #!/usr/bin/env python3
-"""
-Mendelian Randomization Analysis Script
-Implements two-sample MR using IVW and MR-Egger methods
-
-Methods follow Burgess et al. (2023) and Sanderson et al. (2022)
-- IVW: Inverse-variance weighted meta-analysis of Wald ratios
-- MR-Egger: Weighted regression with intercept to test for pleiotropy
-- Allele harmonization: Following TwoSampleMR package approach
-
-Author: Emmanuel Okusanya
-Date: 2024
-"""
 
 import pandas as pd
 import numpy as np
@@ -32,7 +20,6 @@ print_and_write("Mendelian Randomization Analysis Results")
 print_and_write("=" * 70)
 print_and_write()
 
-# ========= 1. LOAD + STANDARDISE =========
 
 exposure_path = "exposure.txt"
 outcome_path  = "outcome.txt"
@@ -66,7 +53,7 @@ outcome = outcome_raw.rename(columns={
     "n": "n_outcome"
 })
 
-# Keep only relevant columns and drop missing (but allow missing n and gene_name)
+# Keeps only relevant columns
 exposure_cols = ["snp", "ea_exposure", "oa_exposure",
                  "beta_exposure", "se_exposure", "pval_exposure", "n_exposure"]
 if has_gene_name:
@@ -79,7 +66,6 @@ outcome = outcome[["snp", "ea_outcome", "oa_outcome",
 print_and_write(f"Exposure SNPs: {exposure.shape[0]}")
 print_and_write(f"Outcome SNPs:  {outcome.shape[0]}")
 
-# Report gene information if available
 if has_gene_name:
     unique_genes = exposure["gene_name"].nunique()
     print_and_write(f"Unique genes in exposure: {unique_genes}")
