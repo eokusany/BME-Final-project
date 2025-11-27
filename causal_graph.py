@@ -124,7 +124,41 @@ min_beta_exp = 1e-6
 merged_h = merged_h[np.abs(merged_h["beta_exposure"]) > min_beta_exp].copy()
 print(f"  - SNPs after beta filter: {merged_h.shape[0]:,}")
 
-# ========= 3. CALCULATE GENE-LEVEL SUMMARY STATISTICS =========
+# F-statistic measures instrument strength: F = (beta_exposure / se_exposure)^2
+# F > 50 ensures very strong instruments (consistent with run.py)
+# This helps avoid weak instrument bias in MR analysis
+
+merged_h["f_statistic"] = (merged_h["beta_exposure"] / merged_h["se_exposure"]) ** 2
+
+print(f"\nF-statistics calculated")
+print(f"  - Mean F-statistic: {merged_h['f_statistic'].mean():.2f}")
+print(f"  - Median F-statistic: {merged_h['f_statistic'].median():.2f}")
+print(f"  - Min F-statistic: {merged_h['f_statistic'].min():.2f}")
+print(f"  - Max F-statistic: {merged_h['f_statistic'].max():.2f}")
+
+# Filter for F > 50 (very strong instruments)
+f_threshold = 50
+n_before_f = merged_h.shape[0]
+merged_h = merged_h[merged_h["f_statistic"] > f_threshold].copy()
+n_after_f = merged_h.shape[0]
+
+print(f"SNPs after F-statistic filter (F > {f_threshold}): {n_after_f:,}")
+print(f"  - SNPs removed: {n_before_f - n_after_f:,} ({(n_before_f - n_after_f)/n_before_f*100:.1f}%)")
+
+# Report F-statistics by gene if available
+if has_gene_name and "gene_name" in merged_h.columns:
+    gene_f_stats = merged_h.groupby("gene_name")["f_statistic"].agg(['mean', 'min', 'max', 'count'])
+    print(f"\nF-statistics by gene (after filtering):")
+    for gene in sorted(gene_f_stats.index):
+        mean_f = gene_f_stats.loc[gene, 'mean']
+        min_f = gene_f_stats.loc[gene, 'min']
+        max_f = gene_f_stats.loc[gene, 'max']
+        count = int(gene_f_stats.loc[gene, 'count'])
+        print(f"  {gene}: mean F = {mean_f:.2f}, range = [{min_f:.2f}, {max_f:.2f}], n_SNPs = {count}")
+
+print()
+
+
 
 print("\nCalculating gene-level summary statistics...")
 
@@ -232,7 +266,7 @@ data_scaled = scaler.fit_transform(data_df.values)
 
 var_names = list(genes) + ['LVEF']
 
-# RUN PC ALGORITHM
+
 # PC algorithm: Constraint-based causal discovery
 # Tests conditional independence to infer causal structure
 # Alpha = significance threshold for independence tests

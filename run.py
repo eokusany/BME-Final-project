@@ -129,7 +129,43 @@ merged_h["beta_outcome"] = merged_h["beta_out_harmonised"]
 print_and_write(f"SNPs after harmonisation: {merged_h.shape[0]}")
 
 
-# ========= 3. WALD RATIOS =========
+
+# F-statistic measures instrument strength: F = (beta_exposure / se_exposure)^2
+# F > 10 is standard threshold, F > 50 ensures very strong instruments
+# This helps avoid weak instrument bias in MR analysis
+
+merged_h["f_statistic"] = (merged_h["beta_exposure"] / merged_h["se_exposure"]) ** 2
+
+print_and_write(f"F-statistics calculated")
+print_and_write(f"  - Mean F-statistic: {merged_h['f_statistic'].mean():.2f}")
+print_and_write(f"  - Median F-statistic: {merged_h['f_statistic'].median():.2f}")
+print_and_write(f"  - Min F-statistic: {merged_h['f_statistic'].min():.2f}")
+print_and_write(f"  - Max F-statistic: {merged_h['f_statistic'].max():.2f}")
+
+# Filter for F > 50 
+f_threshold = 50
+n_before_f = merged_h.shape[0]
+merged_h = merged_h[merged_h["f_statistic"] > f_threshold].copy()
+n_after_f = merged_h.shape[0]
+
+print_and_write(f"SNPs after F-statistic filter (F > {f_threshold}): {n_after_f}")
+print_and_write(f"  - SNPs removed: {n_before_f - n_after_f} ({(n_before_f - n_after_f)/n_before_f*100:.1f}%)")
+
+# Report F-statistics by gene if available
+if has_gene_name and "gene_name" in merged_h.columns:
+    gene_f_stats = merged_h.groupby("gene_name")["f_statistic"].agg(['mean', 'min', 'max', 'count'])
+    print_and_write(f"\nF-statistics by gene (after filtering):")
+    for gene in sorted(gene_f_stats.index):
+        mean_f = gene_f_stats.loc[gene, 'mean']
+        min_f = gene_f_stats.loc[gene, 'min']
+        max_f = gene_f_stats.loc[gene, 'max']
+        count = int(gene_f_stats.loc[gene, 'count'])
+        print_and_write(f"  {gene}: mean F = {mean_f:.2f}, range = [{min_f:.2f}, {max_f:.2f}], n_SNPs = {count}")
+
+print_and_write()
+
+
+# ========= 4. WALD RATIOS =========
 # Each SNP provides an estimate of the causal effect: beta_outcome / beta_exposure
 # This is the Wald ratio estimator (standard MR approach)
 
@@ -148,7 +184,7 @@ se_y   = merged_h["se_outcome"].values
 beta_mr = beta_y / beta_x
 
 # Delta-method SE for the ratio
-# Standard error propagation formula - learned this from stats courses
+# Standard error propagation formula
 se_mr = np.sqrt(
     (se_y ** 2) / (beta_x ** 2) +
     (beta_y ** 2) * (se_x ** 2) / (beta_x ** 4)
@@ -158,7 +194,7 @@ merged_h["beta_mr"] = beta_mr
 merged_h["se_mr"] = se_mr
 
 
-# ========= 4. IVW MR =========
+
 # Inverse-variance weighted meta-analysis combines Wald ratios
 # Weights are inverse of variance (1/SE^2) - gives more weight to precise estimates
 # This is the standard MR approach (Burgess et al. 2023)
@@ -187,7 +223,7 @@ print_and_write(f"z        = {z_ivw:.3f}")
 print_and_write(f"p-value  = {p_ivw:.3e}")
 
 
-# ========= 5. MR-EGGER (SENSITIVITY) =========
+# ========= 6. MR-EGGER (SENSITIVITY) =========
 # MR-Egger regression tests for directional pleiotropy
 # Intercept != 0 suggests pleiotropy (Burgess & Thompson 2017) [21]
 # Slope provides pleiotropy-adjusted causal estimate
