@@ -31,7 +31,7 @@ This project implements a two-sample Mendelian Randomization (MR) framework to e
 
 ### Prerequisites
 
-Ensure you have the required data files:
+The required data files are included in this repository:
 - `exposure.txt` - Exposure data (eQTL summary statistics)
 - `outcome.txt` - Outcome data (GWAS summary statistics)
 
